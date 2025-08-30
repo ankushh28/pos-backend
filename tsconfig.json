@@ -11,5 +11,8 @@
   },
   "files": ["src/types/express/index.d.ts"],
   "include": ["src/**/*", "src/types/**/*"],
-  "exclude": ["node_modules", "**/*.spec.ts"]
+  "exclude": [
+    "node_modules",
+    "**/*.spec.ts"
+  ]
 }
