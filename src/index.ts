@@ -15,7 +15,7 @@ dotenv.config();
 
 const app: Express = express();
 const server = createServer(app);
-const port = 5000;
+const port = 5151;
 
 app.use(cors());
 app.use(helmet());
