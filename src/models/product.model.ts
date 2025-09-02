@@ -51,6 +51,12 @@ const productSchema = new Schema<IProduct>(
   { timestamps: true }
 );
 
+// Optimized text search index with weighted fields
+productSchema.index(
+  { name: "text", brand: "text", description: "text" },
+  { weights: { name: 5, brand: 3, description: 1 }, name: "ProductTextIndex" }
+);
+
 export const Product = model<IProduct>("Product", productSchema);
 
 export interface IQuantityChange {

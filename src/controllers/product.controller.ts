@@ -297,4 +297,57 @@ export const getUploadBatches = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Optimized product search (name, brand, description)
+ * Query params: q (string), limit (1-50), page (>=1)
+ */
+export const searchProducts = async (req: Request, res: Response) => {
+  try {
+    const q = (req.query.q as string) || "";
+    const page = Math.max(Number(req.query.page ?? 1), 1);
+    const limit = Math.min(Math.max(Number(req.query.limit ?? 20), 1), 50);
+
+    if (!q.trim()) {
+      return res.status(200).json({ products: [], pagination: { currentPage: page, totalPages: 0, totalCount: 0, pageSize: limit } });
+    }
+    const textQuery: any = { $text: { $search: q } };
+    const projection: any = { score: { $meta: "textScore" }, name: 1, brand: 1, description: 1, retailPrice: 1, sizes: 1, barcode: 1, category: 1 };
+
+    let cursor = Product.find(textQuery, projection).sort({ score: { $meta: "textScore" } });
+
+    const results = await cursor.skip((page - 1) * limit).limit(limit).lean();
+    let totalCount = 0;
+    if (results.length > 0) {
+      totalCount = await Product.countDocuments(textQuery);
+    } else {
+      const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+      const fallbackFilter = { $or: [{ name: regex }, { brand: regex }, { description: regex }] } as any;
+      totalCount = await Product.countDocuments(fallbackFilter);
+      cursor = Product.find(fallbackFilter, projection).sort({ name: 1 });
+    }
+
+    const products = results.length > 0
+      ? results
+      : await cursor.skip((page - 1) * limit).limit(limit).lean();
+
+    // Derive total quantity per product for quick list displays
+    const normalized = products.map((p: any) => ({
+      ...p,
+      quantity: Array.isArray(p.sizes) ? p.sizes.reduce((s: number, z: any) => s + (z.quantity || 0), 0) : 0,
+    }));
+
+    return res.status(200).json({
+      products: normalized,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalCount / limit),
+        totalCount,
+        pageSize: limit,
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 
