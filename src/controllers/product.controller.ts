@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import {Product, UploadBatch, IQuantityChange} from "../models/product.model";
+import mongoose from "mongoose";
 import * as XLSX from "xlsx";
 import * as crypto from "crypto";
 
@@ -98,32 +99,17 @@ export const getProducts = async (req: Request, res: Response) => {
  */
 export const getProductById = async (req: Request, res: Response) => {
   try {
-    const product = await Product.findById(req.params.id);
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid product id" });
+    }
+    const product = await Product.findById(id);
     if (!product) {
       return res.status(404).json({ success: false, message: "Product not found" });
     }
     return res.status(200).json({ success: true, data: product });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-/**
- * Update product by ID
- */
-export const updateProduct = async (req: Request, res: Response) => {
-  try {
-    const updatedProduct = await Product.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    );
-    if (!updatedProduct) {
-      return res.status(404).json({ success: false, message: "Product not found" });
-    }
-    return res.status(200).json({ success: true, data: updatedProduct });
-  } catch (error: any) {
-    return res.status(400).json({ success: false, message: error.message });
   }
 };
 
@@ -306,31 +292,48 @@ export const searchProducts = async (req: Request, res: Response) => {
     const q = (req.query.q as string) || "";
     const page = Math.max(Number(req.query.page ?? 1), 1);
     const limit = Math.min(Math.max(Number(req.query.limit ?? 20), 1), 50);
+    const skip = (page - 1) * limit;
 
     if (!q.trim()) {
       return res.status(200).json({ products: [], pagination: { currentPage: page, totalPages: 0, totalCount: 0, pageSize: limit } });
     }
-    const textQuery: any = { $text: { $search: q } };
-    const projection: any = { score: { $meta: "textScore" }, name: 1, brand: 1, description: 1, retailPrice: 1, sizes: 1, barcode: 1, category: 1 };
 
-    let cursor = Product.find(textQuery, projection).sort({ score: { $meta: "textScore" } });
-
-    const results = await cursor.skip((page - 1) * limit).limit(limit).lean();
+    const baseFields = { name: 1, brand: 1, description: 1, retailPrice: 1, sizes: 1, barcode: 1, category: 1 } as const;
+    let products: any[] = [];
     let totalCount = 0;
-    if (results.length > 0) {
-      totalCount = await Product.countDocuments(textQuery);
-    } else {
+
+    // Try text search first with score
+    try {
+      const textQuery: any = { $text: { $search: q } };
+      products = await Product.find(
+        textQuery,
+        { ...baseFields, score: { $meta: "textScore" } } as any
+      )
+        .sort({ score: { $meta: "textScore" } })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+
+      if (products.length > 0) {
+        totalCount = await Product.countDocuments(textQuery);
+      }
+    } catch (_) {
+      // Ignore text search failure and fallback
+      products = [];
+    }
+
+    // Fallback to regex without text score metadata
+    if (products.length === 0) {
       const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
       const fallbackFilter = { $or: [{ name: regex }, { brand: regex }, { description: regex }] } as any;
       totalCount = await Product.countDocuments(fallbackFilter);
-      cursor = Product.find(fallbackFilter, projection).sort({ name: 1 });
+      products = await Product.find(fallbackFilter, baseFields as any)
+        .sort({ name: 1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
     }
 
-    const products = results.length > 0
-      ? results
-      : await cursor.skip((page - 1) * limit).limit(limit).lean();
-
-    // Derive total quantity per product for quick list displays
     const normalized = products.map((p: any) => ({
       ...p,
       quantity: Array.isArray(p.sizes) ? p.sizes.reduce((s: number, z: any) => s + (z.quantity || 0), 0) : 0,
@@ -351,3 +354,18 @@ export const searchProducts = async (req: Request, res: Response) => {
 };
 
 
+export const updateProduct = async (req: Request, res: Response) => {
+  try {
+    const updatedProduct = await Product.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+    if (!updatedProduct) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+    return res.status(200).json({ success: true, data: updatedProduct });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+};
