@@ -181,6 +181,8 @@ export const uploadProductsFromExcel = async (req: Request, res: Response) => {
           description: row["description"] || "",
           brand: row["brand"] || "",
           barcode: row["barcode"] || ""
+          , hsnSac: row["HSN/SAC"] || ""
+          , gst: row["GST"] !== undefined ? Number(row["GST"]) : null
         };
       }
       grouped[key].sizes.push({

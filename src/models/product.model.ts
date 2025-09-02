@@ -15,6 +15,8 @@ export interface IProduct extends Document {
   description?: string;
   brand?: string;
   barcode?: string;
+  hsnSac?: string;
+  gst?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -43,6 +45,8 @@ const productSchema = new Schema<IProduct>(
     description: { type: String, default: "" },
     brand: { type: String, default: "" },
     barcode: { type: String, unique: false, sparse: true },
+  hsnSac: { type: String, default: "" },
+  gst: { type: Number, default: null },
   },
   { timestamps: true }
 );
