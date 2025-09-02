@@ -21,10 +21,75 @@ export const addProduct = async (req: Request, res: Response) => {
  */
 export const getProducts = async (req: Request, res: Response) => {
   try {
-    const products = await Product.find().sort({ createdAt: -1 });
-    return res.status(200).json({ success: true, data: products });
+    const {
+      page = 1,
+      limit = 20,
+      q = "",
+      sortBy = "name",
+      sortDir = "asc"
+    } = req.query;
+
+    const filter: any = {};
+    if (q) {
+      const regex = new RegExp(q as string, "i");
+      filter.$or = [
+        { name: regex },
+        { category: regex },
+        { brand: regex },
+        { barcode: regex }
+      ];
+    }
+
+    const sortOptions: any = {};
+    const allowedSort = ["name", "retailPrice", "quantity"];
+    if (allowedSort.includes(sortBy as string)) {
+      sortOptions[sortBy as string] = sortDir === "desc" ? -1 : 1;
+    } else {
+      sortOptions["name"] = 1;
+    }
+
+    const pageNum = Math.max(Number(page), 1);
+    const pageSize = Math.max(Number(limit), 1);
+    const skip = (pageNum - 1) * pageSize;
+
+    let products = await Product.find(filter)
+      .sort(sortOptions)
+      .skip(skip)
+      .limit(pageSize)
+      .lean();
+
+    products = products.map((product: any) => ({
+      ...product,
+      quantity: Array.isArray(product.sizes)
+        ? product.sizes.reduce((sum: number, sz: any) => sum + (sz.quantity || 0), 0)
+        : 0
+    }));
+
+    if (sortBy === "quantity") {
+      products.sort((a: any, b: any) =>
+        sortDir === "desc"
+          ? b.quantity - a.quantity
+          : a.quantity - b.quantity
+      );
+    }
+
+    const totalCount = await Product.countDocuments(filter);
+    const totalPages = Math.ceil(totalCount / pageSize);
+
+    return res.status(200).json({
+      products,
+      pagination: {
+        currentPage: pageNum,
+        totalPages,
+        totalCount,
+        pageSize
+      }
+    });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({
+      message: error.message,
+      code: "INTERNAL_ERROR"
+    });
   }
 };
 

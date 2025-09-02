@@ -125,38 +125,69 @@ export class OrderController {
   // Get All Orders with Analytics
   static async getAllOrders(req: Request, res: Response) {
     try {
-      const { from, to, paymentStatus, page = 1, limit = 10 } = req.query;
-      
+      const {
+        from,
+        to,
+        paymentStatus,
+        page = 1,
+        limit = 20,
+        sortBy = "date",
+        sortDir = "desc",
+        q = ""
+      } = req.query;
+
       const filter: any = {};
-      
       // Date filtering
       if (from || to) {
         filter.date = {};
         if (from) filter.date.$gte = new Date(from as string);
         if (to) filter.date.$lte = new Date(to as string);
       }
-
-      // Payment status filtering
       if (paymentStatus) {
         filter.paymentStatus = paymentStatus;
       }
 
-      const skip = (Number(page) - 1) * Number(limit);
+      if (q) {
+        const regex = new RegExp(q as string, "i");
+        filter.$or = [
+          { _id: q },
+          { customerPhone: regex },
+          { "items.product.name": regex }
+        ];
+      }
 
-      // Get orders with pagination
-      const orders = await OrderModel.find(filter)
-        .populate('items.product', 'name category')
-        .sort({ date: -1 })
+      const pageNum = Math.max(Number(page), 1);
+      const pageSize = Math.max(Number(limit), 1);
+      const skip = (pageNum - 1) * pageSize;
+
+      const allowedSort = ["date", "total", "profit"];
+      let sortOptions: any = {};
+      if (allowedSort.includes(sortBy as string)) {
+        sortOptions[sortBy as string] = sortDir === "asc" ? 1 : -1;
+      } else {
+        sortOptions["date"] = -1;
+      }
+
+      let orders = await OrderModel.find(filter)
+        .populate("items.product", "name category")
+        .sort(sortOptions)
         .skip(skip)
-        .limit(Number(limit));
+        .limit(pageSize)
+        .lean();
 
-      // Analytics filter - exclude cancelled orders unless specifically requested
+      if (["total", "profit"].includes(sortBy as string)) {
+        orders = orders.sort((a: any, b: any) =>
+          sortDir === "desc"
+            ? b[sortBy as string] - a[sortBy as string]
+            : a[sortBy as string] - b[sortBy as string]
+        );
+      }
+
       const analyticsFilter = { ...filter };
       if (!paymentStatus) {
         analyticsFilter.paymentStatus = { $ne: "CANCELLED" };
       }
 
-      // Get analytics
       const analytics = await OrderModel.aggregate([
         { $match: analyticsFilter },
         {
@@ -178,8 +209,9 @@ export class OrderController {
       };
 
       const totalCount = await OrderModel.countDocuments(filter);
+      const totalPages = Math.ceil(totalCount / pageSize);
 
-      res.json({
+      res.status(200).json({
         orders,
         analytics: {
           totalOrders: stats.totalOrders,
@@ -188,15 +220,17 @@ export class OrderController {
           avgOrderPrice: Math.round(stats.avgOrderPrice * 100) / 100
         },
         pagination: {
-          currentPage: Number(page),
-          totalPages: Math.ceil(totalCount / Number(limit)),
+          currentPage: pageNum,
+          totalPages,
           totalCount,
-          hasNext: skip + Number(limit) < totalCount,
-          hasPrev: Number(page) > 1
+          pageSize
         }
       });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch orders" });
+    } catch (error: any) {
+      res.status(500).json({
+        message: error.message || "Failed to fetch orders",
+        code: "INTERNAL_ERROR"
+      });
     }
   }
 
