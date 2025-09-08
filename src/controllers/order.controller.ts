@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { OrderModel } from "../models/order.model";
 import { Product } from "../models/product.model";
 import { Types } from "mongoose";
+import { generateInvoiceData } from "../utils/invoice";
 
 export class OrderController {
   // Create Order
@@ -286,6 +287,31 @@ export class OrderController {
       res.json(order);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch order" });
+    }
+  }
+
+  // Generate Invoice JSON for an order
+  static async getInvoice(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+
+      if (!Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ error: "Invalid order ID" });
+      }
+
+      const order = await OrderModel.findById(id)
+        .populate("items.product", "name hsnSac gst")
+        .lean();
+
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+
+      // @ts-ignore populate flattens types at runtime for our generator contract
+      const data = generateInvoiceData(order as any);
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate invoice" });
     }
   }
 }
