@@ -129,6 +129,41 @@ export const deleteProduct = async (req: Request, res: Response) => {
 };
 
 /**
+ * Bulk delete products by IDs
+ */
+export const bulkDeleteProducts = async (req: Request, res: Response) => {
+  try {
+    const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    if (!ids.length) {
+      return res.status(400).json({ success: false, message: "No product ids provided" });
+    }
+
+    const { validIds, invalidIds } = ids.reduce(
+      (acc, id) => {
+        if (mongoose.Types.ObjectId.isValid(id)) acc.validIds.push(id); else acc.invalidIds.push(id);
+        return acc;
+      },
+      { validIds: [] as string[], invalidIds: [] as string[] }
+    );
+
+    if (!validIds.length) {
+      return res.status(400).json({ success: false, message: "No valid product ids provided", invalidIds });
+    }
+
+    const result = await Product.deleteMany({ _id: { $in: validIds } });
+    return res.status(200).json({
+      success: true,
+      deleted: result.deletedCount || 0,
+      requested: ids.length,
+      invalidIds,
+      message: `Deleted ${result.deletedCount || 0} products` + (invalidIds.length ? ` (${invalidIds.length} invalid ids ignored)` : "")
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
  * Bulk upload products from Excel with duplicate prevention and rollback
  */
 export const uploadProductsFromExcel = async (req: Request, res: Response) => {

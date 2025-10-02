@@ -1,6 +1,6 @@
 import { Router } from "express";
 import {authMiddleware} from "../middlewares/auth";
-import { addProduct, getProductById, getProducts, updateProduct, uploadProductsFromExcel, rollbackUpload, getUploadBatches, deleteProduct, searchProducts } from "../controllers/product.controller";
+import { addProduct, getProductById, getProducts, updateProduct, uploadProductsFromExcel, rollbackUpload, getUploadBatches, deleteProduct, searchProducts, bulkDeleteProducts } from "../controllers/product.controller";
 import multer from "multer";
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -14,6 +14,7 @@ router.route("/product/search").get(authMiddleware, searchProducts);
 router.route("/product/bulk/add").post(upload.single("file"), uploadProductsFromExcel);
 router.route("/product/bulk/rollback/:uploadId").delete(rollbackUpload);
 router.route("/product/bulk/batches").get(getUploadBatches);
+router.route("/product/bulk/delete").post(authMiddleware, bulkDeleteProducts);
 
 // Constrain :id to a 24-hex ObjectId to avoid collisions like "/product/search"
 router.route("/product/:id([0-9a-fA-F]{24})").get(authMiddleware, getProductById);
