@@ -1,7 +1,7 @@
 import { connect } from "mongoose";
 
 export const connectDB = async () => {
-  await connect(`mongodb://ankush:12345678@65.2.180.60:27017/admin`)
+  await connect(`mongodb+srv://ankush:123@elite-backend.tdchpl3.mongodb.net/?retryWrites=true&w=majority&appName=elite-backend`)
     .then(() => {
       console.log("Connected to database");
     })
