@@ -19,10 +19,10 @@ const app: Express = express();
 const server = createServer(app);
 
 // ✅ Use Render's PORT or fallback for local dev
-const port = process.env.PORT || 5151;
+const port = process.env.PORT || 8080;
 
 // Middlewares
-app.use(cors({ origin: "*", optionsSuccessStatus: 200 }));
+app.use(cors({ origin: "http://localhost:5173", optionsSuccessStatus: 200 }));
 app.use(helmet());
 app.use(cookieParser());
 app.use(express.json());
